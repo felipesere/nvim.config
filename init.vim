@@ -1,21 +1,25 @@
 " Install basic plugins
 call plug#begin('~/.config/nvim/plugged')
   Plug 'chriskempson/base16-vim'
+
   Plug 'bling/vim-airline'
   Plug 'vim-airline/vim-airline-themes'
   Plug 'tpope/vim-surround'
   Plug 'scrooloose/nerdtree'
 
-  Plug 'editorconfig/editorconfig-vim'
   Plug 'Shougo/deoplete.nvim'
+  Plug 'ervandew/supertab'
+  Plug 'osyo-manga/vim-over'
 
   Plug 'tpope/vim-endwise'
-  Plug 'tpope/vim-fugitive'
+  Plug 'albfan/nerdtree-git-plugin'
 
-  Plug 'ervandew/supertab'
+  Plug 'carlitux/deoplete-ternjs'
+  Plug 'dart-lang/dart-vim-plugin'
 
   Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
   Plug 'junegunn/fzf.vim'
+  Plug 'kana/vim-textobj-user'
 
   Plug 'bkad/vim-terraform',      { 'for' :  'terraform' }
   Plug 'elixir-lang/vim-elixir',  { 'for' : ['elixir', 'eelixir'] }
@@ -25,6 +29,7 @@ call plug#begin('~/.config/nvim/plugged')
   Plug 'cespare/vim-toml', { 'for' : 'toml' }
   Plug 'wting/rust.vim',   { 'for' : 'rust' }
   Plug 'ElmCast/elm-vim',  { 'for' : 'elm' }
+  Plug 'vim-scripts/paredit.vim', { 'for' : 'clojure' }
 call plug#end()
 
 scriptencoding utf-8
@@ -41,8 +46,7 @@ set number                        " show the absolute number as well
 set showmatch                     " show bracket matches
 set ignorecase                    " ignore case in search
 set hlsearch                      " highlight all search matches
-set cursorline                    " highlight current line (DISABLED)
-set nocursorcolumn
+set cursorline                    " highlight current line
 set nofoldenable                  " disable code folding
 set smartcase                     " pay attention to case when caps are used
 set incsearch                     " show search results as I type
@@ -54,20 +58,25 @@ set laststatus=2                  " always show status bar
 set clipboard=unnamed             " use the system clipboard
 set wildmenu                      " enable bash style tab completion
 set wildmode=list:longest,full
-runtime macros/matchit.vim        " use % to jump between start/end of methods
 set shortmess+=I
 set noswapfile
 
 let g:loaded_netrw       = 1
 let g:loaded_netrwPlugin = 1
-let g:netrw_banner=0
+let g:netrw_banner       = 0
 let g:deoplete#enable_at_startup = 1
 
+let g:SuperTabDefaultCompletionType = "<c-n>"
+
+ let g:over_enable_auto_nohlsearch = 1
+
 " set color scheme
-colorscheme base16-default
+colorscheme base16-default-dark
 set background=dark
 
 let g:airline_theme = 'base16'
+
+let g:rainbow#blacklist = [233, 234]
 
 " set up some custom colors
 highlight ColorColumn  ctermbg=00
@@ -79,6 +88,8 @@ noremap j gj
 noremap k gk
 noremap gj j
 noremap gk k
+noremap H ^
+noremap L $
 
 command Q execute "qa!"
 
@@ -95,10 +106,10 @@ map <leader>S :so $MYVIMRC <cr>
 
 let $FZF_DEFAULT_COMMAND = 'ag -l -g ""'
 map <c-p> :execute 'FZF'<CR>
-map <silent> <leader><space> :nohl<cr>
 
 "  eliminate white spaace
 nnoremap <leader>w mz:%s/\s\+$//<cr>:let @/=''<cr>`z<cr>:w<cr>
+map <silent> <leader><space> :nohl<cr>
 
 " unmap F1 help
 nmap <F1> :echo<CR>
@@ -110,50 +121,28 @@ nnoremap <silent> <leader>F :NERDTreeFind<CR>
 " map . in visual mode
 vnoremap . :norm.<cr>
 
-function! s:tab_complete_forward()
-  " is completion menu open? cycle to next item
-  if pumvisible()
-    return "\<c-n>"
-  endif
+so /Users/felipe/.config/nvim/elixirblock.vim
 
-  " is there a snippet that can be expanded?
-  " is there a placholder inside the snippet that can be jumped to?
-  if neosnippet#expandable_or_jumpable() 
-    return "\<Plug>(neosnippet_expand_or_jump)"
-  endif
+nnoremap <silent> <Leader>g :call fzf#run({
+      \ 'down': '40%',
+      \ 'source': "git grep " . expand("<cword>"),
+      \ 'sink': function("Extract_from_grep"),
+      \ })<CR>
 
-  " if none of these match just use regular tab
-  return "\<tab>"
+nnoremap <silent> <Leader>G :call fzf#run({
+      \ 'down': '40%',
+      \ 'source': "git grep -l " . expand("<cword>"),
+      \ 'sink': "e",
+      \ })<CR>
+
+function! s:escape(path)
+  return substitute(a:path, ' ', '\\ ', 'g')
 endfunction
 
-function! s:tab_complete_backward()
-  " is completion menu open? cycle to next item
-  if pumvisible()
-    return "\<c-p>"
-  endif
-
-  " is there a snippet that can be expanded?
-  " is there a placholder inside the snippet that can be jumped to?
-  if neosnippet#expandable_or_jumpable() 
-    return "\<Plug>(neosnippet_expand_or_jump)"
-  endif
-
-  " if none of these match just use regular tab
-  return "\<tab>"
+function! Extract_from_grep(line)
+  let parts = split(a:line, ':')
+  let [fn, lno] = parts[0 : 1]
+  execute 'e '. s:escape(fn)
+  execute lno
+  normal! zz
 endfunction
-
-imap <silent><expr><TAB> <SID>tab_complete_forward()
-imap <silent><expr><S-TAB> <SID>tab_complete_backward()
-
-
-" rename current file, via Gary Bernhardt
-function! RenameFile()
-  let old_name = expand('%')
-  let new_name = input('New file name: ', expand('%'))
-  if new_name != '' && new_name != old_name
-    exec ':saveas ' . new_name
-    exec ':silent !rm ' . old_name
-    redraw!
-  endif
-endfunction
-map <leader>n :call RenameFile()<cr>
